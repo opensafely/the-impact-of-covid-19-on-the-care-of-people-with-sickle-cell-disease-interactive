@@ -1,0 +1,128 @@
+version: '3.0'
+
+expectations:
+  population_size: 1000
+
+actions:
+
+  generate_study_population_ethnicity_01GX6SE1YQ45AH63X265TBPBTA:
+    run: cohortextractor:latest generate_cohort
+      --study-definition study_definition_ethnicity
+      --param end_date="2023-03-29"
+      --output-dir output/01GX6SE1YQ45AH63X265TBPBTA --output-format=csv.gz
+    outputs:
+      highly_sensitive:
+        cohort: output/01GX6SE1YQ45AH63X265TBPBTA/input_ethnicity.csv.gz
+
+
+  generate_study_population_01GX6SE1YQ45AH63X265TBPBTA:
+    run: cohortextractor:latest generate_cohort
+      --study-definition study_definition
+      --param codelist_1_path="interactive_codelists/codelist_1.csv"
+      --param codelist_1_type="medication"
+      --param codelist_2_path="interactive_codelists/codelist_2.csv"
+      --param codelist_2_type="event"
+      --param codelist_1_frequency="monthly"
+      --param time_value="10"
+      --param time_scale="years"
+      --param time_event="before"
+      --param codelist_2_comparison_date="end_date"
+      --param operator="AND"
+      --param population="all"
+      --param breakdowns="age,ethnicity,imd,region,sex"
+      --index-date-range="2019-09-01 to 2023-03-29 by month"
+      --output-dir=output/01GX6SE1YQ45AH63X265TBPBTA
+      --output-format=csv.gz
+    outputs:
+      highly_sensitive:
+        cohort: output/01GX6SE1YQ45AH63X265TBPBTA/input_*.csv.gz
+
+  join_cohorts_01GX6SE1YQ45AH63X265TBPBTA:
+    run: >
+      cohort-joiner:v0.0.38
+        --lhs output/01GX6SE1YQ45AH63X265TBPBTA/input_20*.csv.gz
+        --rhs output/01GX6SE1YQ45AH63X265TBPBTA/input_ethnicity.csv.gz
+        --output-dir output/01GX6SE1YQ45AH63X265TBPBTA/joined
+    needs: [generate_study_population_01GX6SE1YQ45AH63X265TBPBTA, generate_study_population_ethnicity_01GX6SE1YQ45AH63X265TBPBTA]
+    outputs:
+      highly_sensitive:
+        cohort: output/01GX6SE1YQ45AH63X265TBPBTA/joined/input_20*.csv.gz
+
+  generate_measures_01GX6SE1YQ45AH63X265TBPBTA:
+    run: >
+      python:latest -m analysis.measures
+        --breakdowns="age,ethnicity,imd,region,sex"
+        --input_dir="output/01GX6SE1YQ45AH63X265TBPBTA/joined"
+        --measure="med_review"
+
+    needs: [join_cohorts_01GX6SE1YQ45AH63X265TBPBTA]
+    outputs:
+      moderately_sensitive:
+        measure: output/01GX6SE1YQ45AH63X265TBPBTA/joined/measure*rate.csv
+        decile_measure: output/01GX6SE1YQ45AH63X265TBPBTA/joined/measure*rate_deciles.csv
+
+  top_5_table_01GX6SE1YQ45AH63X265TBPBTA:
+    run: >
+      python:latest python analysis/top_5.py
+      --codelist-1-path="interactive_codelists/codelist_1.csv"
+      --codelist-2-path="interactive_codelists/codelist_2.csv"
+      --output-dir="output/01GX6SE1YQ45AH63X265TBPBTA"
+    needs: [generate_measures_01GX6SE1YQ45AH63X265TBPBTA]
+    outputs:
+      moderately_sensitive:
+        tables: output/01GX6SE1YQ45AH63X265TBPBTA/joined/top_5*.csv
+
+  deciles_chart_01GX6SE1YQ45AH63X265TBPBTA:
+    run: >
+      deciles-charts:v0.0.33
+        --input-files output/01GX6SE1YQ45AH63X265TBPBTA/joined/measure_practice_rate_deciles.csv
+        --output-dir output/01GX6SE1YQ45AH63X265TBPBTA/joined
+    config:
+      show_outer_percentiles: true
+      tables:
+        output: true
+      charts:
+        output: true
+    needs: [generate_measures_01GX6SE1YQ45AH63X265TBPBTA]
+    outputs:
+      moderately_sensitive:
+        deciles_charts: output/01GX6SE1YQ45AH63X265TBPBTA/joined/deciles_*.*
+
+  plot_measure_01GX6SE1YQ45AH63X265TBPBTA:
+    run: >
+      python:latest python analysis/plot_measures.py
+        --breakdowns="age,ethnicity,imd,region,sex"
+        --output-dir output/01GX6SE1YQ45AH63X265TBPBTA
+    needs: [generate_measures_01GX6SE1YQ45AH63X265TBPBTA]
+    outputs:
+      moderately_sensitive:
+        measure: output/01GX6SE1YQ45AH63X265TBPBTA/plot_measure*.png
+
+  event_counts_01GX6SE1YQ45AH63X265TBPBTA:
+    run: >
+      python:latest python analysis/event_counts.py --input_dir="output/01GX6SE1YQ45AH63X265TBPBTA/joined" --output_dir="output/01GX6SE1YQ45AH63X265TBPBTA"
+    needs: [join_cohorts_01GX6SE1YQ45AH63X265TBPBTA]
+    outputs:
+      moderately_sensitive:
+        measure: output/01GX6SE1YQ45AH63X265TBPBTA/event_counts.json
+
+  generate_report_01GX6SE1YQ45AH63X265TBPBTA:
+    run: >
+      python:latest python analysis/render_report.py
+      --output-dir="output/01GX6SE1YQ45AH63X265TBPBTA"
+      --report-title="Phenoxymethylpenicillin (oral preparations only) & Sickle (SPL-AtRiskv4) (SNOMED CT)"
+      --population="all"
+      --breakdowns="age,ethnicity,imd,region,sex"
+      --codelist-1-name="Phenoxymethylpenicillin (oral preparations only)"
+      --codelist-2-name="Sickle (SPL-AtRiskv4) (SNOMED CT)"
+      --codelist-1-link="opensafely/phenoxymethylpenicillin-oral-preparations-only/14b427f8"
+      --codelist-2-link="nhsd/sickle-spl-atriskv4-snomed-ct/7083ed37"
+      --time-value="10"
+      --time-scale="years"
+      --time-event="before"
+      --start-date="2019-09-01"
+      --end-date="2023-03-29"
+    needs: [event_counts_01GX6SE1YQ45AH63X265TBPBTA, deciles_chart_01GX6SE1YQ45AH63X265TBPBTA, top_5_table_01GX6SE1YQ45AH63X265TBPBTA, plot_measure_01GX6SE1YQ45AH63X265TBPBTA]
+    outputs:
+      moderately_sensitive:
+        notebook: output/01GX6SE1YQ45AH63X265TBPBTA/report.html
