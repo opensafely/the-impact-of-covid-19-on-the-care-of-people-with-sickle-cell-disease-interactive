@@ -21,7 +21,7 @@ def display_image(src, data):
     mtype, _ = mimetypes.guess_type(str(src))
 
     return Markup(
-        f'<img src="data:{mtype};base64, {encoded}" title="Image generated from file: {data}"/>'
+        f'<img src="data:{mtype};base64,{encoded}" title="Image generated from file: {data}">'
     )
 
 
@@ -55,9 +55,8 @@ def data_from_json(path):
 
 def get_data(
     output_dir,
-    report_title="",
     population="all",
-    breakdowns="",
+    breakdowns=[],
     codelist_1_name="",
     codelist_1_link="",
     codelist_2_name="",
@@ -72,9 +71,8 @@ def get_data(
     Get data to render the report
     Args:
         output_dir (str): the output directory all the files are in
-        report_title (str): title of the report
         population (str): population of the report
-        breakdowns (str): comma delimited string of demographic breakdowns
+        breakdowns (list): list of demographic breakdowns
         codelist_1_name (str): name of the first codelist
         codelist_1_link (str): link to the first codelist (OpenCodelists)
         codelist_2_name (str): name of the second codelist
@@ -87,8 +85,6 @@ def get_data(
     Returns:
         dict containing the data
     """
-
-    breakdowns = breakdowns.split(",")
 
     codelist_url_root = "https://opencodelists.org/codelist/"
     codelist_1_link = codelist_url_root + codelist_1_link
@@ -104,7 +100,7 @@ def get_data(
 
     figures = {
         "decile": {
-            "path": output_dir / "joined/deciles_chart_practice_rate_deciles.png",
+            "path": output_dir / "deciles_chart.png",
             "data": output_dir / "joined/measure_practice_rate_deciles.csv",
         },
         "population": {
@@ -150,7 +146,7 @@ def get_data(
         "sex": {
             "title": "Sex",
             "link": None,
-            "description": "",
+            "description": "Sex is grouped by 'M' and 'F'. Patients whose sex is not recorded as either 'M' or 'F' are not included in this analysis to prevent disclosure concerns resulting from low event counts.",
             "figure": figures["sex"],
         },
         "imd": {
@@ -173,16 +169,17 @@ def get_data(
     # population logic
 
     if population == "adults":
-        population_definition = "all registered patients aged 18 and over"
+        population_definition = "all patients aged 18 and over, who are registered with a general practice at the start of each month"
 
     elif population == "children":
-        population_definition = "all registered patients aged under 18"
+        population_definition = "all patients aged under 18, who are registered with a general practice at the start of each month"
 
     else:
-        population_definition = "all registered patients"
+        population_definition = (
+            "all patients registered with a general practice at the start of each month"
+        )
 
     report_data = {
-        "title": report_title,
         "population": population_definition,
         "decile": figures["decile"],
         "population_plot": figures["population"],
@@ -237,9 +234,8 @@ def render(output_dir, **kwargs):
 def get_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument("--output-dir", type=Path)
-    parser.add_argument("--report-title", type=str, default="Report Title")
     parser.add_argument("--population", type=str, default="all")
-    parser.add_argument("--breakdowns", type=str, default="")
+    parser.add_argument("--breakdowns", action="append", default=[])
     parser.add_argument("--start-date", type=str, default="")
     parser.add_argument("--end-date", type=str, default="")
     parser.add_argument("--codelist-1-name", type=str, default="")
